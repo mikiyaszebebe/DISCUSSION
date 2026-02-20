@@ -58,5 +58,4 @@ Opinionated plan for a discussion platform with AI assistance. Stack: FastAPI, H
 
 ## Security/Compliance Notes
 - Do not log raw secrets or PII; scrub before sending to LLM.
-- Add rate limits per user/IP; protect write endpoints with auth.
-- Store HF token in secrets manager in production; rotate regularly.
+- Add rate limits per user/IP; protect write endpoints with auth
