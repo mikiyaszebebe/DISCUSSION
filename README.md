@@ -55,8 +55,3 @@ Opinionated plan for a discussion platform with AI assistance. Stack: FastAPI, H
 3) Hook Hugging Face endpoint for summaries and draft replies via background jobs.
 4) Add labels/classification and moderation hook.
 5) Ship minimal UI or API client examples; add observability (logging, metrics).
-
-## Security/Compliance Notes
-- Do not log raw secrets or PII; scrub before sending to LLM.
-- Add rate limits per user/IP; protect write endpoints with auth.
-- Store HF token in secrets manager in production; rotate regularly.
