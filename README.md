@@ -1,52 +1,62 @@
-# Discussion Guide
+# AI Agent Discussion Platform (Python)
 
-Use this document to keep conversations organized, actionable, and easy to revisit.
+Opinionated plan for a discussion platform with AI assistance. Stack: FastAPI, Hugging Face Inference API for LLM calls, PostgreSQL for storage.
 
-## When to start a discussion
-- You want feedback or brainstorming before creating an issue or PR.
-- You need to document decisions, proposals, meeting notes, or RFCs.
-- You have a question that is not yet a bug or feature request.
+## Core Goals
+- Threaded discussions with messages and attachments.
+- AI helper to summarize threads, propose replies, and suggest routing/labels.
+- Moderation guardrails (rate limits, toxicity check hook).
+- Webhook/API-first so UI clients can be built separately.
 
-## How to start a thread
-1) Pick the right category (e.g., Q&A, Ideas, RFC, Announcements).
-2) Write a clear title with the scope and expected outcome.
-3) In the body, include the context, options considered, and the ask.
-4) Add links to relevant issues/PRs and artifacts (docs, designs, logs).
+## High-Level Architecture
+- FastAPI app: REST + WebSocket for live updates; authentication via JWT or provider SSO.
+- Background worker (Celery/Arq/RQ) for LLM calls, summarization, async indexing.
+- Hugging Face Inference endpoint: completion/summarization; swap to local models later.
+- PostgreSQL: users, discussions, messages, agent jobs, labels.
+- Cache/queue: Redis (for rate limits, job queue, websocket fan-out).
 
-### Starter template
-```
-## Summary
-Concise statement of the topic and goal.
+## Data Model (minimum viable)
+- users: id, email, display_name, role, created_at.
+- discussions: id, title, status (open/closed), created_by, created_at, updated_at.
+- messages: id, discussion_id, author_id, body, metadata (JSON), created_at.
+- agent_jobs: id, discussion_id, type (summary, draft_reply, classify), status, result (JSON), created_at, completed_at.
+- labels: id, name; discussion_labels: discussion_id, label_id.
 
-## Context
-Key facts, links, and constraints (who/what/why/when).
+## API Surface (sketch)
+- POST /auth/login, POST /auth/register (or SSO stub).
+- GET/POST /discussions; GET/PATCH /discussions/{id}.
+- GET/POST /discussions/{id}/messages.
+- POST /discussions/{id}/agent: {type: summary|draft_reply|classify} → job id.
+- GET /agent-jobs/{id} → status/result.
+- WebSocket /ws/discussions/{id}: stream new messages and agent events.
 
-## Options
-- Option A: pros/cons
-- Option B: pros/cons
+## AI Workflows
+- Summarize: worker pulls latest N messages, calls HF endpoint, stores summary in agent_jobs, emits event.
+- Draft reply: use system prompt with thread context and style guide; return candidate reply with rationale.
+- Classify/route: predict labels or assignees; store in agent_jobs and discussion_labels.
+- Safety: pass content through moderation hook before LLM; block or redact on hit.
 
-## Decision / Next Steps
-- Owner: @username
-- Due date: YYYY-MM-DD
-- Actions: list the follow-up tasks or issues to open
-```
+## Config & Secrets
+- HF_API_TOKEN: Hugging Face Inference token.
+- DATABASE_URL: postgres connection string.
+- REDIS_URL: queue/cache backend.
+- APP_SECRET_KEY: signing key for JWT/sessions.
+- ALLOWED_ORIGINS: CORS whitelist.
 
-## Reply etiquette
-- Add evidence: links, code blocks, screenshots when useful.
-- Keep one idea per comment; use bullets for readability.
-- Call out blockers or risks early.
-- If you change your mind, edit the latest summary comment to keep the thread current.
+## Local Dev Outline
+- Python 3.11+; package manager: uv or pip + venv.
+- FastAPI + Uvicorn for API; pick a worker (Celery/Arq/RQ) and keep it minimal.
+- Migrations: Alembic.
+- Tests: pytest + httpx; add VCR-like fixtures for HF calls.
 
-## Decision tracking
-- Summarize the outcome in the top comment and mark it as the answer (or pin it).
-- Create follow-up issues/PRs for actionable items and link back to the thread.
-- If a proposal is rejected, record why to avoid repeating the debate.
+## Milestones
+1) Scaffold FastAPI project, Postgres schema, basic auth.
+2) CRUD for discussions/messages; WebSocket broadcast.
+3) Hook Hugging Face endpoint for summaries and draft replies via background jobs.
+4) Add labels/classification and moderation hook.
+5) Ship minimal UI or API client examples; add observability (logging, metrics).
 
-## Meeting notes (if applicable)
-- Post agendas before the meeting; capture notes in the thread during/after.
-- Include attendees, decisions, and action items with owners and dates.
-
-## Moderation
-- Be respectful and assume positive intent.
-- Keep discussions focused on the topic; start a new thread when scope drifts.
-- Remove sensitive data; use sanitized excerpts for logs or screenshots.
+## Security/Compliance Notes
+- Do not log raw secrets or PII; scrub before sending to LLM.
+- Add rate limits per user/IP; protect write endpoints with auth.
+- Store HF token in secrets manager in production; rotate regularly.
